@@ -9,8 +9,7 @@ public class Router {
     private static final int PORT = 5000;
     private volatile boolean isRunning = true;
     private final Map<String, String> arpTable = new ConcurrentHashMap<>(); // IP -> MAC
-    private final Map<String, String> macToIp = new ConcurrentHashMap<>();  // MAC -> IP
-    private final Map<String, InetSocketAddress> clients = new ConcurrentHashMap<>(); // MAC -> address
+    private final Map<String, ClientInfo> clients = new ConcurrentHashMap<>(); // MAC -> address
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public static void main(String[] args) {
@@ -49,7 +48,14 @@ public class Router {
             String command = parts[1];
 
             // Регистрируем клиента
-            clients.put(senderMac, new InetSocketAddress(packet.getAddress(), packet.getPort()));
+            ClientInfo info = clients.get(senderMac);
+            if (info == null) {
+                // Если клиент новый, IP может быть еще неизвестна (будет установлена при REGISTER)
+                clients.put(senderMac, new ClientInfo(null, new InetSocketAddress(packet.getAddress(), packet.getPort())));
+            } else {
+                // Обновляем только адрес (IP остается прежним)
+                clients.put(senderMac, new ClientInfo(info.ip, new InetSocketAddress(packet.getAddress(), packet.getPort())));
+            }
 
             switch (command) {
                 case "REGISTER":
@@ -79,9 +85,10 @@ public class Router {
             return;
         }
 
-        // Проверка на конфликт MAC
-        if (macToIp.containsKey(mac) && !macToIp.get(mac).equals(ip)) {
-            System.out.println("MAC conflict detected! MAC " + mac + " already registered to IP " + macToIp.get(mac));
+        // Проверка на конфликт MAC (только если клиент уже зарегистрировал IP)
+        ClientInfo existingClient = clients.get(mac);
+        if (existingClient != null && existingClient.ip != null && !existingClient.ip.equals(ip)) {
+            System.out.println("MAC conflict detected! MAC " + mac + " already registered to IP " + existingClient.ip);
             return;
         }
 
@@ -96,7 +103,10 @@ public class Router {
         }
 
         arpTable.put(ip, mac);
-        macToIp.put(mac, ip);
+        clients.compute(mac, (k, v) ->
+                v == null ?
+                        new ClientInfo(ip, null) :
+                        new ClientInfo(ip, v.adress));
         System.out.println("Registered: IP " + ip + " -> MAC " + mac);
     }
 
@@ -107,6 +117,8 @@ public class Router {
         }
 
         String targetMac = arpTable.get(targetIp);
+        ClientInfo targetInfo = clients.get(targetMac);
+
         if (!clients.containsKey(targetMac)) {
             System.out.println("MAC " + targetMac + " not connected");
             return;
@@ -116,9 +128,8 @@ public class Router {
         String message = senderMac + ";PING;" + targetIp;
         byte[] buffer = message.getBytes();
 
-        InetSocketAddress targetAddress = clients.get(targetMac);
         try {
-            socket.send(new DatagramPacket(buffer, buffer.length, targetAddress));
+            socket.send(new DatagramPacket(buffer, buffer.length, targetInfo.adress));
             System.out.println("Forwarded PING from " + senderMac + " to " + targetMac);
         } catch (IOException e) {
             System.err.println("Error forwarding PING: " + e.getMessage());
@@ -132,9 +143,9 @@ public class Router {
         }
 
         byte[] buffer = message.getBytes();
-        InetSocketAddress targetAddress = clients.get(targetMac);
+        ClientInfo targetInfo = clients.get(targetMac);
         try {
-            socket.send(new DatagramPacket(buffer, buffer.length, targetAddress));
+            socket.send(new DatagramPacket(buffer, buffer.length, targetInfo.adress));
             System.out.println("Forwarded PONG to " + targetMac);
         } catch (IOException e) {
             System.err.println("Error forwarding PONG: " + e.getMessage());
