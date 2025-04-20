@@ -30,7 +30,6 @@ public class Router {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 socket.receive(packet);
 
-                // Обработка пакета в отдельном потоке
                 executor.execute(() -> handlePacket(socket, packet));
             }
         } catch (IOException e) {
@@ -47,20 +46,17 @@ public class Router {
             String senderMac = parts[0];
             String command = parts[1];
 
-            // Регистрируем клиента
             ClientInfo info = clients.get(senderMac);
             if (info == null) {
-                // Если клиент новый, IP может быть еще неизвестна (будет установлена при REGISTER)
                 clients.put(senderMac, new ClientInfo(null, new InetSocketAddress(packet.getAddress(), packet.getPort())));
             } else {
-                // Обновляем только адрес (IP остается прежним)
                 clients.put(senderMac, new ClientInfo(info.ip, new InetSocketAddress(packet.getAddress(), packet.getPort())));
             }
 
             switch (command) {
                 case "REGISTER":
                     String ip = parts[2];
-                    handleRegistration(senderMac, ip);
+                    handleRegistration(senderMac, ip, socket);
                     break;
                 case "PING":
                     String targetIp = parts[2];
@@ -78,14 +74,12 @@ public class Router {
         }
     }
 
-    private void handleRegistration(String mac, String ip) {
-        // Проверка на конфликт IP
+    private void handleRegistration(String mac, String ip, DatagramSocket socket) {
         if (arpTable.containsKey(ip) && !arpTable.get(ip).equals(mac)) {
             System.out.println("IP conflict detected! IP " + ip + " already registered to MAC " + arpTable.get(ip));
             return;
         }
 
-        // Проверка на конфликт MAC (только если клиент уже зарегистрировал IP)
         ClientInfo existingClient = clients.get(mac);
         if (existingClient != null && existingClient.ip != null && !existingClient.ip.equals(ip)) {
             System.out.println("MAC conflict detected! MAC " + mac + " already registered to IP " + existingClient.ip);
@@ -107,7 +101,14 @@ public class Router {
                 v == null ?
                         new ClientInfo(ip, null) :
                         new ClientInfo(ip, v.adress));
-        System.out.println("Registered: IP " + ip + " -> MAC " + mac);
+        String message = mac + ";" + "REGISTER_ACK" + ";" + ip;
+        byte[] buffer = message.getBytes();
+        try {
+            socket.send(new DatagramPacket(buffer, buffer.length, clients.get(mac).adress));
+            System.out.println("Registered: IP " + ip + " -> MAC " + mac);
+        } catch (IOException e) {
+            System.err.println("Error handling registration: " + e.getMessage());
+        }
     }
 
     private void handlePing(DatagramSocket socket, String senderMac, String targetIp) {
@@ -124,7 +125,6 @@ public class Router {
             return;
         }
 
-        // Формируем сообщение для пересылки
         String message = senderMac + ";PING;" + targetIp;
         byte[] buffer = message.getBytes();
 
