@@ -1,5 +1,7 @@
 package org.pds.client;
 
+import org.pds.util.IpAddressValidator;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.*;
@@ -17,6 +19,12 @@ public class DnsClient {
             System.out.println("Usage: java DnsClient <domain> <address> <httpPort>");
             return;
         }
+
+        if (!IpAddressValidator.isValid(args[1])) {
+            System.out.println("Invalid IP address: " + args[1]);
+            return;
+        }
+
         domainName = args[0];
         HTTP_PORT = Integer.parseInt(args[2]);
         String ipAddress = args[1];
