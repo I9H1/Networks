@@ -79,7 +79,7 @@ public class Client {
             String targetIp = parts[2];
             String response = macAddress + ";PONG;" + senderMac;
             sendToRouter(response);
-            System.out.println("Sent PING to " + targetIp);
+            System.out.println("Sent PONG to " + targetIp);
         } else if ("DHCP_OFFER".equals(command)) {
             if (parts.length != 4) {
                 System.err.println("Invalid DHCP_OFFER: " + message);
