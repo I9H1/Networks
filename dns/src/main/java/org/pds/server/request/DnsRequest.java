@@ -20,7 +20,7 @@ public sealed interface DnsRequest permits
                 if (parts.length < 3) {
                     throw new DnsException("ERROR Invalid REGISTER format");
                 }
-                yield new RegisterDnsRequest(parts[1], parts[2]);
+                yield new RegisterDnsRequest(parts[1], parts[2], Integer.parseInt(parts[3]));
             }
             case "QUERY" -> {
                 if (parts.length < 2) {

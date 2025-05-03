@@ -2,7 +2,9 @@ package org.pds.client;
 
 import org.pds.util.IpAddressValidator;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.*;
 import java.util.Scanner;
@@ -30,7 +32,7 @@ public class DnsClient {
         String ipAddress = args[1];
 
         discoverDnsServer();
-        registerWithDns(domainName, ipAddress);
+        registerWithDns(domainName, ipAddress, HTTP_PORT);
         new Thread(DnsClient::startHttpServer).start();
 
         new Thread(() -> {
@@ -48,7 +50,6 @@ public class DnsClient {
             }
             scanner.close();
         }).start();
-
     }
 
     private static void discoverDnsServer() {
@@ -74,9 +75,9 @@ public class DnsClient {
         }
     }
 
-    private static void registerWithDns(String domain, String ip) {
+    private static void registerWithDns(String domain, String ip, int port) {
         try (DatagramSocket socket = new DatagramSocket()) {
-            String message = "REGISTER " + domain + " " + ip;
+            String message = "REGISTER " + domain + " " + ip + " " + port;
             byte[] buffer = message.getBytes();
             DatagramPacket packet = new DatagramPacket(
                     buffer,
@@ -107,8 +108,48 @@ public class DnsClient {
             socket.receive(responsePacket);
             String response = new String(responsePacket.getData(), 0, responsePacket.getLength());
             System.out.println("Query Response for " + domain + ": " + response);
+
+            if (!response.startsWith("ERROR")) {
+                String[] parts = response.split(":");
+                if (parts.length == 2) {
+                    String ipAddress = parts[0];
+                    int port = Integer.parseInt(parts[1]);
+                    fetchHtmlPage(ipAddress, port, domain);
+                } else {
+                    System.out.println("Invalid response format: " + response);
+                }
+            }
         } catch (Exception e) {
             System.out.println("Failed to query DNS: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private static void fetchHtmlPage(String ipAddress, int port, String domain) {
+        try (Socket socket = new Socket(InetAddress.getLocalHost(), port)) {
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+            out.println("GET / HTTP/1.1");
+            out.println("Host: " + domain);
+            out.println("Connection: close");
+            out.println();
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            StringBuilder htmlResponse = new StringBuilder();
+            String line;
+            boolean isBody = false;
+            while ((line = in.readLine()) != null) {
+                if (isBody) {
+                    htmlResponse.append(line).append("\n");
+                }
+                if (line.isEmpty()) {
+                    isBody = true;
+                }
+            }
+
+            System.out.println("HTML Page from " + domain + ":");
+            System.out.println(htmlResponse.toString());
+        } catch (IOException e) {
+            System.out.println("Failed to fetch HTML page from " + domain + " (" + ipAddress + ":" + port + "): " + e.getMessage());
             e.printStackTrace();
         }
     }

@@ -1,3 +1,4 @@
+
 package router;
 
 import java.io.*;
@@ -100,11 +101,11 @@ public class Router {
         clients.compute(mac, (k, v) ->
                 v == null ?
                         new ClientInfo(ip, null) :
-                        new ClientInfo(ip, v.adress));
+                        new ClientInfo(ip, v.address));
         String message = mac + ";" + "REGISTER_ACK" + ";" + ip;
         byte[] buffer = message.getBytes();
         try {
-            socket.send(new DatagramPacket(buffer, buffer.length, clients.get(mac).adress));
+            socket.send(new DatagramPacket(buffer, buffer.length, clients.get(mac).address));
             System.out.println("Registered: IP " + ip + " -> MAC " + mac);
         } catch (IOException e) {
             System.err.println("Error handling registration: " + e.getMessage());
@@ -129,7 +130,7 @@ public class Router {
         byte[] buffer = message.getBytes();
 
         try {
-            socket.send(new DatagramPacket(buffer, buffer.length, targetInfo.adress));
+            socket.send(new DatagramPacket(buffer, buffer.length, targetInfo.address));
             System.out.println("Forwarded PING from " + senderMac + " to " + targetMac);
         } catch (IOException e) {
             System.err.println("Error forwarding PING: " + e.getMessage());
@@ -145,7 +146,7 @@ public class Router {
         byte[] buffer = message.getBytes();
         ClientInfo targetInfo = clients.get(targetMac);
         try {
-            socket.send(new DatagramPacket(buffer, buffer.length, targetInfo.adress));
+            socket.send(new DatagramPacket(buffer, buffer.length, targetInfo.address));
             System.out.println("Forwarded PONG to " + targetMac);
         } catch (IOException e) {
             System.err.println("Error forwarding PONG: " + e.getMessage());
